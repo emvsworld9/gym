@@ -1060,7 +1060,7 @@ function syncToSheet(){
     if(data.ok){st.textContent='✓ '+new Date().toLocaleTimeString();}
     else{st.textContent='⚠ Save error';toast('Save error: '+(data.error||'unknown'),true);}
   };
-  const payload={workouts:state.workouts,progress:state.progress,inBody:state.inBody,recovery:state.recovery,PRs:state.PRs,prHistory:state.prHistory,goals:state.goals,nutrition:state.nutrition};
+  const payload={workouts:state.workouts,progress:state.progress,inBody:state.inBody,recovery:state.recovery,PRs:state.PRs,prHistory:state.prHistory,goals:state.goals,nutrition:state.nutrition,workoutTypes:state.workoutTypes,exercises:state.exercises};
   const s=document.createElement('script');
   s.id='_jsonp_save';
   s.src=APPS_SCRIPT_URL+'?callback=_onSheetSave&data='+encodeURIComponent(JSON.stringify({action:'save',payload}));
@@ -1086,6 +1086,8 @@ function loadFromSheet(){
       if(p.prHistory)state.prHistory=p.prHistory;
       if(p.goals)state.goals={...state.goals,...p.goals};
       if(p.nutrition)state.nutrition={...state.nutrition,...p.nutrition};
+      if(p.workoutTypes&&p.workoutTypes.length){state.workoutTypes=p.workoutTypes;state.workoutTypes.forEach(t=>{if(!t.id)t.id=t.name;});}
+      if(p.exercises){Object.keys(p.exercises).forEach(k=>{state.exercises[k]=p.exercises[k];});}
       try{localStorage.setItem('gt_v5',JSON.stringify({workouts:state.workouts,progress:state.progress,inBody:state.inBody,recovery:state.recovery,PRs:state.PRs,prHistory:state.prHistory,goals:state.goals,exercises:state.exercises,workoutTypes:state.workoutTypes,nutrition:state.nutrition}));}catch(e){}
       populateTypeDropdowns();refreshDashboard();refreshRecovery();refreshProgress();refreshNutrition();
       st.textContent='✓ '+new Date().toLocaleTimeString();
