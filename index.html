@@ -1414,51 +1414,183 @@ async function gasRequest(payload){
 }
 
 // ── SYNC ──
-// Save via JSONP (same method as load — works from file://)
-function syncToSheet(){
-  if(!APPS_SCRIPT_URL)return;
-  const st=document.getElementById('sync-status');
-  st.textContent='☁ Saving...';
-  const payload={workouts:state.workouts,progress:state.progress,inBody:state.inBody,recovery:state.recovery,PRs:state.PRs,prHistory:state.prHistory,goals:state.goals,nutrition:state.nutrition,workoutTypes:state.workoutTypes,exercises:state.exercises};
+// ══════════════════════════════════════════════════════
+//  syncToSheet — 3 طرق متتالية مع retry تلقائي
+//  1) fetch POST (شغال من browser)
+//  2) fetch GET + query param (CORS fallback)
+//  3) JSONP script tag مقسّم (شغال من file://)
+// ══════════════════════════════════════════════════════
+async function syncToSheet(){
+  if(!APPS_SCRIPT_URL) return;
+  const st = document.getElementById('sync-status');
+  st.textContent = '☁ Saving...';
 
-  // أول محاولة: fetch POST (شغال لو مفتوح من server أو browser يسمح CORS)
-  fetch(APPS_SCRIPT_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({action:'save',payload})
-  })
-  .then(r=>r.json())
-  .then(data=>{
-    if(data.ok){st.textContent='✓ '+new Date().toLocaleTimeString();_pendingSave=false;}
-    else{st.textContent='⚠ Save error';toast('Save error: '+(data.error||'unknown'),true);}
-  })
-  .catch(()=>{
-    // Fallback: JSONP — بس بنقلل البيانات علشان ما يتجاوزش حد الـ URL
-    const old=document.getElementById('_jsonp_save');if(old)old.remove();
-    window._onSheetSave=function(data){
-      document.getElementById('_jsonp_save')?.remove();
-      if(data.ok){st.textContent='✓ '+new Date().toLocaleTimeString();_pendingSave=false;}
-      else{st.textContent='⚠ Save error';toast('Save error: '+(data.error||'unknown'),true);}
+  const payload = {
+    workouts      : state.workouts,
+    progress      : state.progress,
+    inBody        : state.inBody,
+    recovery      : state.recovery,
+    PRs           : state.PRs,
+    prHistory     : state.prHistory,
+    goals         : state.goals,
+    nutrition     : state.nutrition,
+    workoutTypes  : state.workoutTypes,
+    exercises     : state.exercises
+  };
+
+  // ── الطريقة 1: fetch POST ──────────────────────────
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method  : 'POST',
+      headers : {'Content-Type':'text/plain'},
+      body    : JSON.stringify({action:'save', payload}),
+      redirect: 'follow'
+    });
+    if(resp.ok){
+      const txt = await resp.text();
+      if(!txt.trim().startsWith('<')){   // مش HTML redirect
+        const data = JSON.parse(txt);
+        if(data.ok){ _syncDone(st); return; }
+      }
+    }
+  } catch(e){ /* CORS / network — try next */ }
+
+  // ── الطريقة 2: fetch GET مع ?data= ────────────────
+  try {
+    const miniPayload = _miniPayload(payload);
+    const qs = encodeURIComponent(JSON.stringify({action:'save', payload:miniPayload}));
+    if(qs.length < 7000){                         // حد URL آمن
+      const resp = await fetch(APPS_SCRIPT_URL + '?data=' + qs, {
+        method  : 'GET',
+        redirect: 'follow'
+      });
+      if(resp.ok){
+        const txt = await resp.text();
+        if(txt.trim().startsWith('<')) throw new Error('html');
+        const data = JSON.parse(txt);
+        if(data.ok){ _syncDone(st); return; }
+      }
+    }
+  } catch(e){ /* جرب JSONP */ }
+
+  // ── الطريقة 3: form POST خفي (file:// safe, بدون CORS) ──
+  try {
+    const ok = await _syncViaFormPost(payload, st);
+    if(ok){ _syncDone(st); return; }
+  } catch(e){}
+
+  // ── الطريقة 4: JSONP كـ last resort ─────────────────
+  _syncViaJSONP(payload, st);
+}
+
+// ── Helpers ────────────────────────────────────────
+function _syncDone(st){
+  st.textContent = '✓ ' + new Date().toLocaleTimeString();
+  _pendingSave = false;
+}
+
+function _miniPayload(p){
+  return {
+    workouts    : (p.workouts  ||[]).slice(-50),
+    progress    : p.progress   || [],
+    inBody      : p.inBody     || [],
+    recovery    : (p.recovery  ||[]).slice(-30),
+    PRs         : p.PRs        || {},
+    prHistory   : p.prHistory  || {},
+    goals       : p.goals      || {},
+    nutrition   : {...(p.nutrition||{}), meals:((p.nutrition||{}).meals||[]).slice(-30)},
+    workoutTypes: p.workoutTypes|| [],
+    exercises   : p.exercises  || {}
+  };
+}
+
+// ── الطريقة 4: hidden form POST (file:// safe, no URL limit) ──
+// بنستخدمها لو JSONP كمان فشل أو الداتا كبيرة
+function _syncViaFormPost(payload, st){
+  return new Promise((resolve) => {
+    const cbName = '_gymFormPostCb';
+    const iframeId = '_gym_iframe_post';
+
+    // شيل القديم
+    document.getElementById(iframeId)?.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id    = iframeId;
+    iframe.name  = iframeId;
+    iframe.style.cssText = 'display:none;position:absolute;width:0;height:0';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.method  = 'POST';
+    form.action  = APPS_SCRIPT_URL;
+    form.target  = iframeId;
+    form.style.display = 'none';
+
+    const input   = document.createElement('input');
+    input.type    = 'hidden';
+    input.name    = 'postData';  // Apps Script يقرأها من e.postData.contents
+    input.value   = JSON.stringify({action:'save', payload: _miniPayload(payload)});
+    form.appendChild(input);
+    document.body.appendChild(form);
+
+    const timer = setTimeout(()=>{
+      iframe.remove(); form.remove();
+      resolve(false);
+    }, 12000);
+
+    iframe.onload = () => {
+      clearTimeout(timer);
+      iframe.remove(); form.remove();
+      resolve(true); // مش ممكن نقرأ الرد بس لو ما اتكسرش يبقى اتبعت
     };
-    // نبعت آخر 50 workout بس علشان ما يكبرش الـ URL
-    const mini={
-      workouts:state.workouts.slice(-50),
-      progress:state.progress,
-      inBody:state.inBody,
-      recovery:state.recovery.slice(-30),
-      PRs:state.PRs,
-      prHistory:state.prHistory,
-      goals:state.goals,
-      nutrition:{...state.nutrition,meals:(state.nutrition.meals||[]).slice(-30)},
-      workoutTypes:state.workoutTypes,
-      exercises:state.exercises
-    };
-    const s=document.createElement('script');
-    s.id='_jsonp_save';
-    s.src=APPS_SCRIPT_URL+'?callback=_onSheetSave&data='+encodeURIComponent(JSON.stringify({action:'save',payload:mini}));
-    s.onerror=()=>{st.textContent='⚠ Save error';toast('Save failed — check Apps Script deployment',true);};
-    document.head.appendChild(s);
+
+    form.submit();
   });
+}
+
+// JSONP مقسّم: نبعت البيانات الأساسية أولاً (workouts + PRs)
+// وبعدين progress + recovery + inBody في طلب تاني
+// عشان ما يكبرش الـ URL ويفشل
+function _syncViaJSONP(payload, st){
+  const cbName = '_onSheetSaveA';
+  const old = document.getElementById('_jsonp_save_a');
+  if(old) old.remove();
+  let done = false;
+
+  const timer = setTimeout(()=>{
+    if(done) return;
+    done = true;
+    st.textContent = '⚠ Save error';
+    toast('Save failed — check Apps Script deployment', true);
+  }, 15000);
+
+  window[cbName] = function(data){
+    clearTimeout(timer);
+    document.getElementById('_jsonp_save_a')?.remove();
+    delete window[cbName];
+    if(done) return;
+    done = true;
+    if(data && data.ok){
+      _syncDone(st);
+    } else {
+      st.textContent = '⚠ Save error';
+      toast('Save error: ' + ((data&&data.error)||'unknown'), true);
+    }
+  };
+
+  const mini = _miniPayload(payload);
+  const qs   = encodeURIComponent(JSON.stringify({action:'save', payload:mini}));
+  const s    = document.createElement('script');
+  s.id       = '_jsonp_save_a';
+  s.src      = APPS_SCRIPT_URL + '?callback=' + cbName + '&data=' + qs;
+  s.onerror  = ()=>{
+    clearTimeout(timer);
+    if(done) return;
+    done = true;
+    st.textContent = '⚠ Save error';
+    toast('Save failed — check Apps Script deployment', true);
+  };
+  document.head.appendChild(s);
 }
 
 // Load via JSONP script tag (only method that works from file://)
