@@ -102,7 +102,7 @@ textarea{resize:vertical;min-height:55px}
 .wh-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none}
 .wh-body{display:none;padding:0 14px 12px;border-top:1px solid var(--border)}
 .wh-body.open{display:block}
-.wh-ex-row{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between}
+.wh-ex-row{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center}
 .wh-ex-row:last-child{border-bottom:none}
 .rec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
 .rec-btn{padding:10px 5px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg3);cursor:pointer;font-size:11px;text-align:center;color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif;line-height:1.3}
@@ -947,10 +947,49 @@ function saveWorkout(){
   else toast(`✅ Saved! ${exercises.length} ex · ${Math.round(totalVol).toLocaleString()} kg`+(duration?` · ${duration}min`:''));
 }
 function discardWorkout(){if(!document.getElementById('exercises-container').children.length||(confirm&&confirm('Discard?'))){document.getElementById('exercises-container').innerHTML='';state.sessionStart=null;stopTimer();toast('Session discarded');}}
-function showExerciseHistory(name){if(!name)return;const sessions=state.workouts.filter(w=>w.exercises.some(e=>e.name===name)).slice(-10).reverse();let html=`<div class="modal-title">${name}<button class="btn btn-xs" onclick="closeModal()">✕</button></div>`;if(!sessions.length){html+='<div class="empty">No history.</div>';}else{html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="font-size:10px;color:var(--text3);text-transform:uppercase"><th style="text-align:left;padding:6px 0">Date</th><th style="text-align:right">Max</th><th style="text-align:right">Vol</th></tr></thead><tbody>';sessions.forEach(w=>{const ex=w.exercises.find(e=>e.name===name);const vol=ex.sets.reduce((a,s)=>a+(s.reps*s.weight),0);html+=`<tr style="border-top:1px solid var(--border)"><td style="padding:8px 0;font-size:13px">${w.date}</td><td style="text-align:right;font-family:'DM Mono',monospace;color:var(--green);font-size:13px">${ex.maxWeight}kg</td><td style="text-align:right;font-size:12px;color:var(--text2)">${Math.round(vol)}kg</td></tr>`;});html+='</tbody></table>';}openModal(html);}
+function showExerciseHistory(name){
+  if(!name)return;
+  const sessions=state.workouts.filter(w=>w.exercises.some(e=>e.name===name)).slice(-15).reverse();
+  let html=`<div class="modal-title" style="font-size:20px">📊 ${name}<button class="btn btn-xs" onclick="closeModal()" style="margin-left:auto">✕</button></div>`;
+  if(!sessions.length){html+='<div class="empty">No history yet.</div>';}
+  else{
+    html+=sessions.map(w=>{
+      const ex=w.exercises.find(e=>e.name===name);
+      const vol=ex.sets.reduce((a,s)=>a+(s.reps*s.weight),0);
+      const maxW=ex.maxWeight||Math.max(...ex.sets.map(s=>s.weight||0));
+      const setsHtml=ex.sets.map((s,i)=>{
+        const isMax=s.weight===maxW;
+        return`<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:12px;font-size:12px;font-family:'DM Mono',monospace;background:${isMax?'rgba(0,255,170,0.12)':'rgba(255,255,255,0.05)'};border:1px solid ${isMax?'rgba(0,255,170,0.35)':'rgba(255,255,255,0.08)'};color:${isMax?'var(--green)':'var(--text2)'}"><span style="font-size:9px;color:var(--text3);margin-right:2px">S${i+1}</span>${s.reps}<span style="opacity:.5;margin:0 1px">×</span>${s.weight}kg${isMax?'<span style="font-size:9px;margin-left:3px">🏆</span>':''}</span>`;
+      }).join(' ');
+      return`<div style="padding:11px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <span style="font-size:13px;font-weight:600">${w.date} ${w.type?`<span style="font-size:10px;color:var(--text3);font-weight:400">${w.type}</span>`:''}</span>
+          <span style="font-size:11px;color:var(--text3)">Vol: <span style="color:var(--amber);font-family:'DM Mono',monospace">${Math.round(vol)} kg</span> · Max: <span style="color:var(--green);font-family:'DM Mono',monospace">${maxW} kg</span></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${setsHtml}</div>
+      </div>`;
+    }).join('');
+  }
+  openModal(html);
+}
 
 // ── HISTORY ──
-function renderHistory(){const filter=document.getElementById('history-filter')?.value||'';const search=(document.getElementById('history-search')?.value||'').toLowerCase();const container=document.getElementById('history-list');let wk=state.workouts.slice().reverse();if(filter)wk=wk.filter(w=>w.type===filter);if(search)wk=wk.filter(w=>(w.date+' '+w.type+' '+(w.notes||'')+' '+w.exercises.map(e=>e.name).join(' ')).toLowerCase().includes(search));if(!wk.length){container.innerHTML='<div class="empty">No workouts found.</div>';return;}container.innerHTML=wk.map((w,i)=>{const rpeStr=w.rpe?`<span style="font-size:10px;color:var(--purple);margin-left:4px">RPE ${w.rpe}</span>`:'';return`<div class="wh-card"><div class="wh-header" onclick="toggleWH(${i})">${typeTag(w.type)}<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">${w.date}${rpeStr}</div>${w.notes?`<div style="font-size:11px;color:var(--text3)">${w.notes}</div>`:''}</div><div style="text-align:right;font-size:12px;color:var(--text2)"><div style="font-family:'DM Mono',monospace;color:var(--green)">${(w.totalVolume||0).toLocaleString()} kg</div><div>${w.exercises.length} ex · ${w.duration?w.duration+'min':'—'}</div></div><button class="btn btn-xs btn-danger" style="margin-left:8px" onclick="event.stopPropagation();deleteWorkout(${state.workouts.length-1-i})">✕</button></div><div class="wh-body" id="wh-body-${i}">${w.exercises.map(ex=>`<div class="wh-ex-row"><span style="font-weight:500">${ex.name}</span><span style="color:var(--text2)">${ex.sets.length} sets · max <span style="color:var(--green);font-family:'DM Mono',monospace">${ex.maxWeight}kg</span></span></div>`).join('')}</div></div>`}).join('');}
+function renderExSets(ex){
+  // Renders all sets for an exercise as pills: Set1: 10×80kg  Set2: 8×85kg ...
+  const totalVol=ex.sets.reduce((a,s)=>a+(s.reps*s.weight),0);
+  const setsHtml=ex.sets.map((s,i)=>{
+    const isMax=s.weight===ex.maxWeight;
+    return`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:11px;font-family:'DM Mono',monospace;background:${isMax?'rgba(0,255,170,0.1)':'rgba(255,255,255,0.04)'};border:1px solid ${isMax?'rgba(0,255,170,0.3)':'rgba(255,255,255,0.07)'};color:${isMax?'var(--green)':'var(--text2)'}"><span style="font-size:9px;color:var(--text3)">S${i+1}</span>${s.reps}<span style="color:var(--text3);font-size:10px">×</span>${s.weight}kg</span>`;
+  }).join(' ');
+  return`<div class="wh-ex-row" style="flex-direction:column;align-items:flex-start;gap:5px;padding:8px 0">
+    <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+      <span style="font-weight:600;font-size:13px">${ex.name}</span>
+      <span style="font-size:11px;color:var(--text3)">${ex.sets.length} sets · <span style="color:var(--green);font-family:'DM Mono',monospace">${Math.round(totalVol)} kg vol</span></span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${setsHtml}</div>
+  </div>`;
+}
+function renderHistory(){const filter=document.getElementById('history-filter')?.value||'';const search=(document.getElementById('history-search')?.value||'').toLowerCase();const container=document.getElementById('history-list');let wk=state.workouts.slice().reverse();if(filter)wk=wk.filter(w=>w.type===filter);if(search)wk=wk.filter(w=>(w.date+' '+w.type+' '+(w.notes||'')+' '+w.exercises.map(e=>e.name).join(' ')).toLowerCase().includes(search));if(!wk.length){container.innerHTML='<div class="empty">No workouts found.</div>';return;}container.innerHTML=wk.map((w,i)=>{const rpeStr=w.rpe?`<span style="font-size:10px;color:var(--purple);margin-left:4px">RPE ${w.rpe}</span>`:'';return`<div class="wh-card"><div class="wh-header" onclick="toggleWH(${i})">${typeTag(w.type)}<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">${w.date}${rpeStr}</div>${w.notes?`<div style="font-size:11px;color:var(--text3)">${w.notes}</div>`:''}</div><div style="text-align:right;font-size:12px;color:var(--text2)"><div style="font-family:'DM Mono',monospace;color:var(--green)">${(w.totalVolume||0).toLocaleString()} kg</div><div>${w.exercises.length} ex · ${w.duration?w.duration+'min':'—'}</div></div><button class="btn btn-xs btn-danger" style="margin-left:8px" onclick="event.stopPropagation();deleteWorkout(${state.workouts.length-1-i})">✕</button></div><div class="wh-body" id="wh-body-${i}">${w.exercises.map(ex=>renderExSets(ex)).join('')}</div></div>`}).join('');}
 function toggleWH(i){document.getElementById('wh-body-'+i).classList.toggle('open');}
 function deleteWorkout(idx){if(!confirm('Delete?'))return;state.workouts.splice(idx,1);saveToStorage();renderHistory();toast('Workout deleted');}
 
