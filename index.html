@@ -2145,6 +2145,134 @@ function drawMacroPie(){
   state.charts.macroPie=new Chart(ctx,{type:'doughnut',data:{labels:['Protein','Carbs','Fats'],datasets:[{data:[p,c,f],backgroundColor:['#5599ff','#00ffaa','#bb88ff'],borderWidth:0,borderRadius:3}]},options:{cutout:'68%',responsive:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+Math.round(ctx.parsed/total*100)+'%';}}}}}});
 }
 
+// ── SESSION PERSISTENCE ──
+// بيحفظ التمرين الجاري كل ما يتغير حاجة، وبيعمل restore لو الصفحة اتفتحت من أول
+
+function saveActiveSession(){
+  try{
+    const container=document.getElementById('exercises-container');
+    if(!container)return;
+    const exercises=[];
+    container.querySelectorAll('.ex-block').forEach(block=>{
+      const id=block.id.split('-')[1];
+      const name=document.getElementById('exname-'+id)?.value||'';
+      const note=document.getElementById('exnote-'+id)?.value||'';
+      const sets=[];
+      block.querySelectorAll('.set-row').forEach(row=>{
+        const repsEl=row.querySelector('input[id^="reps"]');
+        const wtEl=row.querySelector('input[id^="wt"]');
+        sets.push({reps:repsEl?repsEl.value:'',weight:wtEl?wtEl.value:''});
+      });
+      exercises.push({name,note,sets});
+    });
+    if(!exercises.length){localStorage.removeItem('gt_active_session');return;}
+    const dateField=document.getElementById('log-date');
+    const typeField=document.getElementById('log-type');
+    const notesField=document.getElementById('log-notes');
+    localStorage.setItem('gt_active_session',JSON.stringify({
+      exercises,
+      date:dateField?.value||'',
+      type:typeField?.value||'',
+      notes:notesField?.value||'',
+      sessionStart:state.sessionStart,
+      rpe:_rpe,
+      feel:_feel,
+      exIdCounter:state.exIdCounter,
+      savedAt:Date.now()
+    }));
+  }catch(e){}
+}
+
+function restoreActiveSession(){
+  try{
+    const raw=localStorage.getItem('gt_active_session');
+    if(!raw)return false;
+    const data=JSON.parse(raw);
+    // لو في session محفوظة من أقل من 12 ساعة
+    if(!data.exercises||!data.exercises.length)return false;
+    if(Date.now()-data.savedAt>12*60*60*1000){localStorage.removeItem('gt_active_session');return false;}
+
+    // روح على Log screen
+    navTo('log');
+
+    // ملي الحقول
+    const dateField=document.getElementById('log-date');
+    const typeField=document.getElementById('log-type');
+    const notesField=document.getElementById('log-notes');
+    if(dateField&&data.date)dateField.value=data.date;
+    if(typeField&&data.type)typeField.value=data.type;
+    if(notesField&&data.notes)notesField.value=data.notes;
+    if(data.sessionStart)state.sessionStart=data.sessionStart;
+    if(data.exIdCounter)state.exIdCounter=data.exIdCounter;
+
+    // أعد بناء التمرينات
+    const container=document.getElementById('exercises-container');
+    container.innerHTML='';
+
+    data.exercises.forEach(exData=>{
+      state.exIdCounter++;
+      const id=state.exIdCounter;
+      setCounters[id]=exData.sets.length;
+      const div=document.createElement('div');div.className='ex-block';div.id='ex-'+id;
+      div.innerHTML=`<div class="ex-header"><div style="flex:1;min-width:0"><input class="ex-name-input" type="text" value="${esc(exData.name)}" placeholder="Exercise name" id="exname-${id}"><div class="ex-meta" id="exmeta-${id}"></div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="btn btn-xs btn-amber tooltip" data-tip="Start rest timer" data-exid="${id}">⏱</button><button class="btn btn-xs btn-danger" data-removeid="${id}">✕</button></div></div><div class="sets-header"><span></span><span>Reps</span><span>Weight (kg)</span><span>Volume</span><span></span></div><div id="sets-${id}"></div><div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap"><button class="btn btn-xs" data-addset="${id}">+ Set</button><button class="btn btn-xs" data-copyset="${id}">Copy last</button><button class="btn btn-xs" style="color:var(--text3)" data-exhistory="${id}">📈 History</button><button class="btn btn-xs" data-exnote="${id}" style="color:var(--text3)">📝 Note</button></div><div id="exnote-wrap-${id}" style="display:none;margin-top:6px"><input type="text" id="exnote-${id}" placeholder="Notes for this exercise..." style="font-size:12px;padding:5px 9px"></div>`;
+      div.querySelector(`[data-exid="${id}"]`).addEventListener('click',function(){const n=document.getElementById('exname-'+id)?.value||'Exercise';startRestTimer(90,n);});
+      div.querySelector(`[data-removeid="${id}"]`).addEventListener('click',function(){document.getElementById('ex-'+id).remove();saveActiveSession();});
+      div.querySelector(`[data-addset="${id}"]`).addEventListener('click',function(){addSet(id);saveActiveSession();});
+      div.querySelector(`[data-copyset="${id}"]`).addEventListener('click',function(){copyLastSet(id);saveActiveSession();});
+      div.querySelector(`[data-exhistory="${id}"]`).addEventListener('click',function(){showExerciseHistory(document.getElementById('exname-'+id)?.value||'');});
+      div.querySelector(`[data-exnote="${id}"]`).addEventListener('click',function(){const w=document.getElementById('exnote-wrap-'+id);if(w){w.style.display=w.style.display==='none'?'block':'none';if(w.style.display==='block')document.getElementById('exnote-'+id)?.focus();}});
+      container.appendChild(div);
+
+      // أعد بناء الـ sets مع القيم
+      const setsContainer=div.querySelector('#sets-'+id);
+      exData.sets.forEach((setData,idx)=>{
+        const setNum=idx+1;
+        const row=makeSetRow(id,setNum);
+        setsContainer.appendChild(row);
+        // أعد تحميل القيم
+        const repsInput=row.querySelector(`#reps-${id}-${setNum}`);
+        const wtInput=row.querySelector(`#wt-${id}-${setNum}`);
+        if(repsInput&&setData.reps)repsInput.value=setData.reps;
+        if(wtInput&&setData.weight)wtInput.value=setData.weight;
+        if(setData.reps&&setData.weight)calcVol(id,setNum);
+      });
+
+      // note
+      if(exData.note){
+        const noteWrap=document.getElementById('exnote-wrap-'+id);
+        const noteInput=document.getElementById('exnote-'+id);
+        if(noteWrap)noteWrap.style.display='block';
+        if(noteInput)noteInput.value=exData.note;
+      }
+      if(exData.name&&state.PRs[exData.name])document.getElementById('exmeta-'+id).textContent='Best: '+state.PRs[exData.name].weight+'kg';
+    });
+
+    toast('🔄 Session restored! تمرينك راجع تاني',false);
+    return true;
+  }catch(e){return false;}
+}
+
+// Hook الـ auto-save على كل تغيير في الـ exercises container
+document.addEventListener('input',function(e){
+  if(e.target.closest('#exercises-container')||e.target.id==='log-date'||e.target.id==='log-type'||e.target.id==='log-notes'){
+    clearTimeout(window._sessionSaveT);
+    window._sessionSaveT=setTimeout(saveActiveSession,600);
+  }
+});
+
+// Clear session عند الـ save أو discard
+const _origSaveWorkout=saveWorkout;
+const _origDiscardWorkout=discardWorkout;
+saveWorkout=function(){_origSaveWorkout();localStorage.removeItem('gt_active_session');};
+discardWorkout=function(){_origDiscardWorkout();localStorage.removeItem('gt_active_session');};
+
+// Hook addExercise لـ auto-save
+const _origAddExercise=addExercise;
+addExercise=function(name){
+  _origAddExercise(name);
+  setTimeout(saveActiveSession,200);
+};
+
 // ── UPGRADE saveWorkout to use RPE and celebrate PRs ──
 // (overrides the existing one — placed after the original)
 loadFromStorage();
@@ -2158,6 +2286,10 @@ refreshProgress();
 renderMealTemplates();
 renderSessionTemplates();
 refreshCopyLastCard();
+
+// استعادة الـ session لو في واحدة محفوظة
+setTimeout(()=>restoreActiveSession(),300);
+
 // Only auto-load from sheet if local storage is empty (first time)
 if(APPS_SCRIPT_URL){
   const hasLocalData=state.workouts.length>0||state.inBody.length>0||state.progress.length>0;
