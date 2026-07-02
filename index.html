@@ -373,9 +373,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
     Progress
   </button>
-  <button class="mbn-item" id="mbn-nutrition" onclick="navTo('nutrition')">
-    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
-    Nutrition
+  <button class="mbn-item" id="mbn-history" onclick="navTo('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>
+    History
   </button>
   <button class="mbn-item" id="mbn-coach" onclick="navTo('coach')">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -395,8 +395,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
     <div class="nav-section">Track</div>
     <div class="nav-item" data-nav="history" onclick="navTo('history')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg><span>History</span></div>
     <div class="nav-item" data-nav="progress" onclick="navTo('progress')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg><span>Progress</span></div>
-    <div class="nav-item" data-nav="recovery" onclick="navTo('recovery')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg><span>Recovery</span></div>
-    <div class="nav-item" data-nav="nutrition" onclick="navTo('nutrition')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg><span>Nutrition</span><span class="nav-badge" style="background:var(--amber);color:#000;font-size:9px">NEW</span></div>
     <div class="nav-section">Manage</div>
     <div class="nav-item" data-nav="types" onclick="navTo('types')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg><span>Workout Types</span><span class="nav-badge" style="background:var(--purple);color:#fff;font-size:9px">NEW</span></div>
     <div class="nav-item" data-nav="library" onclick="navTo('library')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>Exercise Library</span></div>
@@ -464,7 +462,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" style="margin-left:auto"><polyline points="9 18 15 12 9 6"/></svg>
   </div>
   <div class="card">
-    <div class="row2"><div class="field"><label>Date</label><input type="text" id="log-date" placeholder="e.g. 22 May 2026"></div><div class="field"><label>Day type</label><select id="log-type" onchange="refreshSuggestions()"></select></div></div>
+    <div class="row2"><div class="field"><label>Date</label><input type="text" id="log-date" placeholder="e.g. 22 May 2026"></div><div class="field"><label>Day type</label><select id="log-type" onchange="refreshSuggestions();refreshCopyLastCard()"></select></div></div>
     <div class="row2">
       <div class="field"><label>Notes</label><input type="text" id="log-notes" placeholder="Optional session notes..."></div>
       <div class="field"><label>Session RPE <span id="rpe-val-label" style="color:var(--green);font-family:'DM Mono',monospace">—</span></label>
@@ -1045,6 +1043,12 @@ function saveWorkout(){
   blocks.forEach(block=>{const id=block.id.split('-')[1];const name=(document.getElementById('exname-'+id)?.value||'Exercise').trim();const sets=[];block.querySelectorAll('.set-row').forEach(row=>{const rE=row.querySelector('input[id^="reps"]'),wE=row.querySelector('input[id^="wt"]');if(rE&&wE){const r=parseFloat(rE.value)||0,w=parseFloat(wE.value)||0;if(r>0||w>0){sets.push({reps:r,weight:w});totalVol+=r*w;}}});if(sets.length>0){const maxWt=Math.max(...sets.map(s=>s.weight||0));const exNote=document.getElementById('exnote-'+id)?.value.trim()||'';exercises.push({name,sets,maxWeight:maxWt,note:exNote});if(!state.PRs[name]||maxWt>state.PRs[name].weight){if(state.PRs[name])newPRs.push(name+' '+maxWt+'kg');state.PRs[name]={weight:maxWt,date};if(!state.prHistory[name])state.prHistory[name]=[];state.prHistory[name].push({weight:maxWt,date,timestamp:Date.now()});}}});
   if(!exercises.length){toast('No valid sets found!',true);return;}
   const duration=state.sessionStart?Math.round((Date.now()-state.sessionStart)/60000):0;
+  // أي تمرين جديد اتكتب في الحصة ومش موجود في مكتبة النوع ده، يتحفظ تلقائي
+  // عشان يفضل ظاهر كـ suggestion المرات الجايه
+  if(type){
+    if(!state.exercises[type])state.exercises[type]=[];
+    exercises.forEach(ex=>{if(ex.name&&!state.exercises[type].includes(ex.name))state.exercises[type].push(ex.name);});
+  }
   state.workouts.push({date,type,notes,exercises,totalVolume:Math.round(totalVol),timestamp:Date.now(),duration,rpe:state.sessionRPE,feel:_feel});
   document.getElementById('exercises-container').innerHTML='';document.getElementById('log-date').value='';document.getElementById('log-notes').value='';
   // Reset RPE
@@ -1894,20 +1898,33 @@ function selectFeel(el){
 }
 
 // ── COPY LAST WORKOUT ──
+// يدوّر على آخر تمرين من نفس النوع المختار في log-type، ولو مفيش نوع مختار
+// أو مفيش تمرين بنفس النوع، يرجع لآخر تمرين مطلق كـ fallback
+function _findLastWorkoutForType(){
+  const type=document.getElementById('log-type')?.value||'';
+  if(type){
+    for(let i=state.workouts.length-1;i>=0;i--){
+      if(state.workouts[i].type===type)return state.workouts[i];
+    }
+  }
+  return state.workouts.at(-1);
+}
 function refreshCopyLastCard(){
   const card=document.getElementById('copy-last-card');
   const label=document.getElementById('copy-last-label');
   if(!card)return;
-  const last=state.workouts.at(-1);
+  const last=_findLastWorkoutForType();
   if(last){
     card.style.display='flex';
-    if(label)label.textContent=`${last.date} · ${last.type} · ${last.exercises.length} exercises`;
+    const type=document.getElementById('log-type')?.value||'';
+    const sameType=type&&last.type===type;
+    if(label)label.textContent=`${last.date} · ${last.type} · ${last.exercises.length} exercises`+(sameType?'':' (most recent — different type)');
   } else {
     card.style.display='none';
   }
 }
 function copyLastWorkout(){
-  const last=state.workouts.at(-1);
+  const last=_findLastWorkoutForType();
   if(!last){toast('No previous workout found',true);return;}
   if(document.getElementById('exercises-container').children.length>0){
     if(!confirm('This will add exercises from your last session. Continue?'))return;
