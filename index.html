@@ -93,6 +93,7 @@ textarea{resize:vertical;min-height:55px}
 .btn-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
 .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
+.quickadd-sticky{position:sticky;top:0;z-index:60;background:var(--bg);padding:10px 0 8px;margin:0 0 4px;border-bottom:1px solid var(--border)}
 .chip{padding:4px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text2);cursor:pointer;transition:all .15s;user-select:none}
 .chip:hover{background:var(--green-dim);border-color:var(--green);color:var(--green)}
 .hist-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
@@ -458,8 +459,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
   <!-- Session templates -->
   <div class="section-label">Session templates</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="session-templates"></div>
-  <div class="section-label">Quick add — <span id="suggest-type-label">PUSH</span></div>
-  <div class="chips" id="suggest-chips" style="margin-bottom:14px"></div>
+  <div class="quickadd-sticky">
+    <div class="section-label" style="margin-bottom:6px">Quick add — <span id="suggest-type-label">PUSH</span></div>
+    <div class="chips" id="suggest-chips"></div>
+  </div>
   <div id="exercises-container"></div>
   <div class="btn-row">
     <button class="btn" onclick="addExercise()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add exercise</button>
@@ -886,6 +889,54 @@ function addExerciseToTypeLibrary(name){
   }
 }
 let setCounters={};
+let editingWorkoutIndex=null;
+function editWorkout(idx){
+  const w=state.workouts[idx];
+  if(!w){toast('Workout not found',true);return;}
+  navTo('log');
+  editingWorkoutIndex=idx;
+  document.getElementById('log-date').value=w.date||'';
+  document.getElementById('log-type').value=w.type||'';
+  refreshSuggestions();
+  refreshCopyLastCard();
+  document.getElementById('log-notes').value=w.notes||'';
+  document.getElementById('exercises-container').innerHTML='';
+  if(w.rpe){selectRPE(w.rpe);}
+  else{
+    _rpe=null;state.sessionRPE=null;
+    document.querySelectorAll('.rpe-btn').forEach(b=>b.classList.remove('selected'));
+    const l=document.getElementById('rpe-val-label');if(l)l.textContent='—';
+  }
+  document.querySelectorAll('#feel-chips .chip').forEach(c=>c.classList.remove('chip-selected'));
+  _feel=null;
+  if(w.feel){
+    const chip=[...document.querySelectorAll('#feel-chips .chip')].find(c=>c.dataset.feel===w.feel);
+    if(chip)selectFeel(chip);
+  }
+  (w.exercises||[]).forEach(ex=>{
+    addExercise(ex.name);
+    const id=state.exIdCounter;
+    const setsC=document.getElementById('sets-'+id);
+    if(setsC)setsC.innerHTML='';
+    (ex.sets||[]).forEach((s,i)=>{
+      const row=makeSetRow(id,i+1);
+      setsC.appendChild(row);
+      const rEl=document.getElementById('reps-'+id+'-'+(i+1)),wEl=document.getElementById('wt-'+id+'-'+(i+1));
+      if(rEl)rEl.value=s.reps;
+      if(wEl)wEl.value=s.weight;
+      calcVol(id,i+1);
+    });
+    setCounters[id]=(ex.sets||[]).length;
+    if(ex.note){
+      const noteInput=document.getElementById('exnote-'+id),wrap=document.getElementById('exnote-wrap-'+id);
+      if(noteInput)noteInput.value=ex.note;
+      if(wrap)wrap.style.display='block';
+    }
+  });
+  const sub=document.getElementById('log-session-time');
+  if(sub)sub.textContent='✏️ Editing saved session — press Save to update it';
+  toast('Editing workout — tap Save to update it');
+}
 function addExercise(name=''){
   state.exIdCounter++;const id=state.exIdCounter;setCounters[id]=3;
   const div=document.createElement('div');div.className='ex-block';div.id='ex-'+id;
@@ -941,6 +992,26 @@ function saveWorkout(){
   const exercises=[];let totalVol=0,newPRs=[];
   blocks.forEach(block=>{const id=block.id.split('-')[1];const name=(document.getElementById('exname-'+id)?.value||'Exercise').trim();const sets=[];block.querySelectorAll('.set-row').forEach(row=>{const rE=row.querySelector('input[id^="reps"]'),wE=row.querySelector('input[id^="wt"]');if(rE&&wE){const r=parseFloat(rE.value)||0,w=parseFloat(wE.value)||0;if(r>0||w>0){sets.push({reps:r,weight:w});totalVol+=r*w;}}});if(sets.length>0){const maxWt=Math.max(...sets.map(s=>s.weight||0));const exNote=document.getElementById('exnote-'+id)?.value.trim()||'';exercises.push({name,sets,maxWeight:maxWt,note:exNote});if(!state.PRs[name]||maxWt>state.PRs[name].weight){if(state.PRs[name])newPRs.push(name+' '+maxWt+'kg');state.PRs[name]={weight:maxWt,date};if(!state.prHistory[name])state.prHistory[name]=[];state.prHistory[name].push({weight:maxWt,date,timestamp:Date.now()});}}});
   if(!exercises.length){toast('No valid sets found!',true);return;}
+  // ── EDIT MODE: overwrite the existing workout in place instead of creating a new one ──
+  if(editingWorkoutIndex!==null){
+    const orig=state.workouts[editingWorkoutIndex]||{};
+    state.workouts[editingWorkoutIndex]={
+      ...orig,
+      date,type,notes,exercises,
+      totalVolume:Math.round(totalVol),
+      rpe:state.sessionRPE,feel:_feel
+    };
+    editingWorkoutIndex=null;
+    document.getElementById('exercises-container').innerHTML='';document.getElementById('log-date').value='';document.getElementById('log-notes').value='';
+    _rpe=null;state.sessionRPE=null;document.querySelectorAll('.rpe-btn').forEach(b=>b.classList.remove('selected'));
+    const rpeLabel2=document.getElementById('rpe-val-label');if(rpeLabel2)rpeLabel2.textContent='—';
+    _feel=null;document.querySelectorAll('#feel-chips .chip').forEach(c=>c.classList.remove('chip-selected'));
+    const sub2=document.getElementById('log-session-time');if(sub2)sub2.textContent='Track your session in detail';
+    state.sessionStart=null;stopTimer();saveToStorage();
+    toast(`✅ Workout updated · ${exercises.length} ex · ${Math.round(totalVol).toLocaleString()} kg`);
+    navTo('history');
+    return;
+  }
   const duration=state.sessionStart?Math.round((Date.now()-state.sessionStart)/60000):0;
   state.workouts.push({date,type,notes,exercises,totalVolume:Math.round(totalVol),timestamp:Date.now(),duration,rpe:state.sessionRPE,feel:_feel});
   document.getElementById('exercises-container').innerHTML='';document.getElementById('log-date').value='';document.getElementById('log-notes').value='';
@@ -959,7 +1030,7 @@ function saveWorkout(){
   }
   else toast(`✅ Saved! ${exercises.length} ex · ${Math.round(totalVol).toLocaleString()} kg`+(duration?` · ${duration}min`:''));
 }
-function discardWorkout(){if(!document.getElementById('exercises-container').children.length||(confirm&&confirm('Discard?'))){document.getElementById('exercises-container').innerHTML='';state.sessionStart=null;stopTimer();toast('Session discarded');}}
+function discardWorkout(){if(!document.getElementById('exercises-container').children.length||(confirm&&confirm('Discard?'))){document.getElementById('exercises-container').innerHTML='';state.sessionStart=null;stopTimer();editingWorkoutIndex=null;const sub=document.getElementById('log-session-time');if(sub)sub.textContent='Track your session in detail';toast('Session discarded');}}
 function showExerciseHistory(name){
   if(!name)return;
   const sessions=state.workouts.filter(w=>w.exercises.some(e=>e.name===name)).slice(-15).reverse();
@@ -1014,7 +1085,7 @@ function renderExSets(ex){
     <div style="display:flex;flex-wrap:wrap;gap:4px">${setsHtml}</div>
   </div>`;
 }
-function renderHistory(){const filter=document.getElementById('history-filter')?.value||'';const search=(document.getElementById('history-search')?.value||'').toLowerCase();const container=document.getElementById('history-list');let wk=state.workouts.slice().reverse();if(filter)wk=wk.filter(w=>w.type===filter);if(search)wk=wk.filter(w=>(w.date+' '+w.type+' '+(w.notes||'')+' '+w.exercises.map(e=>e.name).join(' ')).toLowerCase().includes(search));if(!wk.length){container.innerHTML='<div class="empty">No workouts found.</div>';return;}container.innerHTML=wk.map((w,i)=>{const rpeStr=w.rpe?`<span style="font-size:10px;color:var(--purple);margin-left:4px">RPE ${w.rpe}</span>`:'';const feelStr=w.feel?`<span style="font-size:11px;margin-left:6px">${w.feel}</span>`:'';return`<div class="wh-card"><div class="wh-header" onclick="toggleWH(${i})">${typeTag(w.type)}<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">${w.date}${rpeStr}${feelStr}</div>${w.notes?`<div style="font-size:11px;color:var(--text3)">${w.notes}</div>`:''}</div><div style="text-align:right;font-size:12px;color:var(--text2)"><div style="font-family:'DM Mono',monospace;color:var(--green)">${(w.totalVolume||0).toLocaleString()} kg</div><div>${w.exercises.length} ex · ${w.duration?w.duration+'min':'—'}</div></div><button class="btn btn-xs btn-danger" style="margin-left:8px" onclick="event.stopPropagation();deleteWorkout(${state.workouts.length-1-i})">✕</button></div><div class="wh-body" id="wh-body-${i}">${w.exercises.map(ex=>renderExSets(ex)).join('')}</div></div>`}).join('');}
+function renderHistory(){const filter=document.getElementById('history-filter')?.value||'';const search=(document.getElementById('history-search')?.value||'').toLowerCase();const container=document.getElementById('history-list');let wk=state.workouts.slice().reverse();if(filter)wk=wk.filter(w=>w.type===filter);if(search)wk=wk.filter(w=>(w.date+' '+w.type+' '+(w.notes||'')+' '+w.exercises.map(e=>e.name).join(' ')).toLowerCase().includes(search));if(!wk.length){container.innerHTML='<div class="empty">No workouts found.</div>';return;}container.innerHTML=wk.map((w,i)=>{const rpeStr=w.rpe?`<span style="font-size:10px;color:var(--purple);margin-left:4px">RPE ${w.rpe}</span>`:'';const feelStr=w.feel?`<span style="font-size:11px;margin-left:6px">${w.feel}</span>`:'';return`<div class="wh-card"><div class="wh-header" onclick="toggleWH(${i})">${typeTag(w.type)}<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">${w.date}${rpeStr}${feelStr}</div>${w.notes?`<div style="font-size:11px;color:var(--text3)">${w.notes}</div>`:''}</div><div style="text-align:right;font-size:12px;color:var(--text2)"><div style="font-family:'DM Mono',monospace;color:var(--green)">${(w.totalVolume||0).toLocaleString()} kg</div><div>${w.exercises.length} ex · ${w.duration?w.duration+'min':'—'}</div></div><button class="btn btn-xs btn-amber" style="margin-left:8px" onclick="event.stopPropagation();editWorkout(${state.workouts.length-1-i})">✏️</button><button class="btn btn-xs btn-danger" style="margin-left:4px" onclick="event.stopPropagation();deleteWorkout(${state.workouts.length-1-i})">✕</button></div><div class="wh-body" id="wh-body-${i}">${w.exercises.map(ex=>renderExSets(ex)).join('')}</div></div>`}).join('');}
 function toggleWH(i){document.getElementById('wh-body-'+i).classList.toggle('open');}
 function deleteWorkout(idx){if(!confirm('Delete?'))return;state.workouts.splice(idx,1);saveToStorage();renderHistory();toast('Workout deleted');}
 
@@ -1303,12 +1374,13 @@ function renderLibrary(){
   types.forEach(type=>{
     let exs=state.exercises[type]||[];
     if(search)exs=exs.filter(e=>e.toLowerCase().includes(search));
-    html+=`<div class="lib-section"><div class="lib-day-header"><div class="lib-day-title">${typeTag(type)} <span style="color:var(--text2);font-size:12px">${(state.exercises[type]||[]).length} exercises</span></div><button class="btn btn-xs btn-green" data-addtotype="${esc(type)}">+ Add</button></div><div class="lib-exercises">${exs.length?exs.map(e=>`<div class="lib-ex-row"><span class="lib-ex-name">${esc(e)}</span><button class="btn btn-xs btn-amber" data-movetype="${esc(type)}" data-movename="${esc(e)}">Move</button><button class="btn btn-xs btn-danger" data-rmtype="${esc(type)}" data-rmname="${esc(e)}">✕ Remove</button></div>`).join(''):'<div style="padding:8px 10px;font-size:12px;color:var(--text3)">No exercises.</div>'}</div></div>`;
+    html+=`<div class="lib-section"><div class="lib-day-header"><div class="lib-day-title">${typeTag(type)} <span style="color:var(--text2);font-size:12px">${(state.exercises[type]||[]).length} exercises</span></div><button class="btn btn-xs btn-green" data-addtotype="${esc(type)}">+ Add</button></div><div class="lib-exercises">${exs.length?exs.map(e=>`<div class="lib-ex-row"><span class="lib-ex-name">${esc(e)}</span><button class="btn btn-xs" data-renametype="${esc(type)}" data-renamename="${esc(e)}">✏️ Rename</button><button class="btn btn-xs btn-amber" data-movetype="${esc(type)}" data-movename="${esc(e)}">Move</button><button class="btn btn-xs btn-danger" data-rmtype="${esc(type)}" data-rmname="${esc(e)}">✕ Remove</button></div>`).join(''):'<div style="padding:8px 10px;font-size:12px;color:var(--text3)">No exercises.</div>'}</div></div>`;
   });
   container.innerHTML=html||'<div class="empty">No exercises found.</div>';
   container.querySelectorAll('[data-addtotype]').forEach(btn=>{btn.addEventListener('click',function(){openAddExerciseToType(this.dataset.addtotype);});});
   container.querySelectorAll('[data-movetype]').forEach(btn=>{btn.addEventListener('click',function(){moveExercise(this.dataset.movetype,this.dataset.movename);});});
   container.querySelectorAll('[data-rmtype]').forEach(btn=>{btn.addEventListener('click',function(){removeExercise(this.dataset.rmtype,this.dataset.rmname);});});
+  container.querySelectorAll('[data-renametype]').forEach(btn=>{btn.addEventListener('click',function(){openRenameExerciseModal(this.dataset.renametype,this.dataset.renamename);});});
 }
 function openAddExerciseModal(){const types=getTypeNames();openModal(`<div class="modal-title">Add Exercise <button class="btn btn-xs" onclick="closeModal()">✕</button></div><div class="field"><label>Exercise name</label><input type="text" id="m-ex-name" placeholder="e.g. Incline dumbbell curl" autofocus></div><div class="field"><label>Day type</label><select id="m-ex-type">${types.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="btn-row"><button class="btn btn-green" onclick="addExerciseToLibrary()">Add</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);}
 function openAddExerciseToType(type){openModal(`<div class="modal-title">Add to ${type} <button class="btn btn-xs" onclick="closeModal()">✕</button></div><div class="field"><label>Exercise name</label><input type="text" id="m-ex-name" placeholder="e.g. Cable fly" autofocus></div><input type="hidden" id="m-ex-type" value="${type}"><div class="btn-row"><button class="btn btn-green" onclick="addExerciseToLibrary()">Add</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);setTimeout(()=>document.getElementById('m-ex-name')?.focus(),50);}
@@ -1316,6 +1388,30 @@ function addExerciseToLibrary(){const name=(document.getElementById('m-ex-name')
 function removeExercise(type,name){if(!confirm(`Remove "${name}"?`))return;state.exercises[type]=state.exercises[type].filter(e=>e!==name);saveToStorage();renderLibrary();toast(`"${name}" removed`);}
 function moveExercise(fromType,name){const types=getTypeNames().filter(t=>t!==fromType);openModal(`<div class="modal-title">Move "${esc(name)}" <button class="btn btn-xs" onclick="closeModal()">✕</button></div><div class="field"><label>Move to</label><select id="m-move-type">${types.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div><div class="btn-row"><button class="btn btn-green" id="m-move-confirm-btn">Move</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);document.getElementById('m-move-confirm-btn').addEventListener('click',function(){confirmMove(fromType,name);});}
 function confirmMove(fromType,name){const toType=document.getElementById('m-move-type')?.value;if(!toType)return;state.exercises[fromType]=state.exercises[fromType].filter(e=>e!==name);if(!state.exercises[toType])state.exercises[toType]=[];state.exercises[toType].push(name);saveToStorage();closeModal();renderLibrary();toast(`Moved to ${toType}`);}
+function openRenameExerciseModal(type,name){
+  openModal(`<div class="modal-title">Rename "${esc(name)}" <button class="btn btn-xs" onclick="closeModal()">✕</button></div><div class="field"><label>New name</label><input type="text" id="m-exrename-val" value="${esc(name)}" autofocus></div><div style="font-size:11px;color:var(--text3);margin-bottom:10px">This will update the name everywhere: library, past workout history, and PR records.</div><div class="btn-row"><button class="btn btn-green" id="m-exrename-confirm-btn">Rename</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+  document.getElementById('m-exrename-confirm-btn').addEventListener('click',function(){confirmRenameExercise(type,name);});
+  setTimeout(()=>{const i=document.getElementById('m-exrename-val');i?.focus();i?.select();},50);
+}
+function confirmRenameExercise(type,oldName){
+  const newName=(document.getElementById('m-exrename-val')?.value||'').trim();
+  if(!newName){toast('Enter a name',true);return;}
+  if(newName===oldName){closeModal();return;}
+  // Library list
+  if(state.exercises[type]){
+    const i=state.exercises[type].indexOf(oldName);
+    if(i>-1){
+      if(state.exercises[type].includes(newName)&&newName!==oldName){toast('That name already exists in this list',true);closeModal();return;}
+      state.exercises[type][i]=newName;
+    }
+  }
+  // Past workout history
+  state.workouts.forEach(w=>{(w.exercises||[]).forEach(ex=>{if(ex.name===oldName)ex.name=newName;});});
+  // PRs & PR history
+  if(state.PRs[oldName]){state.PRs[newName]=state.PRs[oldName];delete state.PRs[oldName];}
+  if(state.prHistory[oldName]){state.prHistory[newName]=state.prHistory[oldName];delete state.prHistory[oldName];}
+  saveToStorage();closeModal();renderLibrary();toast(`Renamed to "${newName}" ✅`);
+}
 
 // ── GOALS ──
 function refreshGoals(){document.getElementById('g-start').value=state.goals.startWeight||'';document.getElementById('g-target').value=state.goals.weight||'';document.getElementById('g-date').value=state.goals.targetDate||'';document.getElementById('g-sessions-pw').value=state.goals.sessionsPerWeek||4;updateGoalRings();renderCustomGoals();}
